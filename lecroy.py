@@ -12,14 +12,19 @@
 # Version history:
 #   1.0         2013-02-10  First release
 #   1.1         2013-02-13  Added support for sequence acquisitions. Fixed a few bugs.
-#   1.2         2013-07-30  Correctly handles the case where WAVEDESC block starts at the #                           beginning of the file (i.e., there is no file size info)
+#   1.2         2013-07-30  Correctly handles the case where WAVEDESC block starts at the                            beginning of the file (i.e., there is no file size info)
 #   1.3         2013-08-27  Correctly imports FFT traces. TIMEBASE and FIXED VERT GAIN
 #                           reflect horizontal and vertical units. 
 #   1.4         2018-12-24  Ported to Python 3 (no longer works in Python 2). 
 #                           Correctly reports FILE_SIZE in WAVEDESC.
+#   1.5         2019-04-27  Replaced string decoding from standard 'utf-8' to 'latin_1'
+#                           because utf-8 would generate errors on some .trc files. 
+#                           Fixed bug with file size (try to read it from file and rely on
+#                           OS if it's missing).
 #
 import numpy as np
 import math
+import os
 #
 #
 def float2eng(f):
@@ -143,17 +148,18 @@ def ReadBinaryTrace(filePath):
     # Open binary data file for read
     with open(filePath, 'rb') as dataFile:           
         # Read wave descriptor block
-        str2 = dataFile.read(32)           
+        str2 = dataFile.read(32)   
         startOffset = str2.find(b'WAVEDESC')
         if startOffset==-1: 
             raise RuntimeError('File is not in a recognizable format')
             return
-        DESCRIPTOR_NAME = str2[startOffset:startOffset+16].rstrip(b'\0x00').decode('utf-8')
+        DESCRIPTOR_NAME = str2[startOffset:startOffset+16].rstrip(b'\0x00').decode('latin_1')
         # Try to read file size, if present
         try:
-            fileSize = int.from_bytes(str2[4:startOffset],byteorder='little') + startOffset
+            #fileSize = int.from_bytes(str2[4:startOffset],byteorder='little') + startOffset
+            fileSize = int(str2[2:startOffset])
         except ValueError:
-            fileSize = 0
+            fileSize = os.path.getsize(filePath)
         #Find COMM_ORDER first. Use this byte order in all subsequent reads from file
         dataFile.seek(startOffset+34)
         COMM_ORDER_INDEX = np.fromfile(dataFile,dtype='<i2',count=1)[0]
@@ -162,7 +168,7 @@ def ReadBinaryTrace(filePath):
         else: co = '>'
         #Now read all other header parameters           
         dataFile.seek(startOffset+16)
-        TEMPLATE_NAME = dataFile.read(16).rstrip(b'\0x00').decode('utf-8')
+        TEMPLATE_NAME = dataFile.read(16).rstrip(b'\0x00').decode('latin_1')
         if TEMPLATE_NAME != 'LECROY_2_3':
             raise RuntimeError('Template version different from LECROY_2_3')
             return
@@ -179,9 +185,9 @@ def ReadBinaryTrace(filePath):
         WAVE_ARRAY_2 = np.fromfile(dataFile,dtype=co+'i4',count=1)[0]
         RES_ARRAY2 = np.fromfile(dataFile,dtype=co+'i4',count=1)[0]
         RES_ARRAY3 = np.fromfile(dataFile,dtype=co+'i4',count=1)[0]
-        INSTRUMENT_NAME = dataFile.read(16).rstrip(b'\x00').decode('utf-8')
+        INSTRUMENT_NAME = dataFile.read(16).rstrip(b'\x00').decode('latin_1')
         INSTRUMENT_NUMBER = np.fromfile(dataFile,dtype=co+'i4',count=1)[0]
-        TRACE_LABEL = dataFile.read(16).rstrip(b'\x00').decode('utf-8')
+        TRACE_LABEL = dataFile.read(16).rstrip(b'\x00').decode('latin_1')
         RESERVED1 = np.fromfile(dataFile,dtype=co+'i2',count=1)[0]
         RESERVED2 = np.fromfile(dataFile,dtype=co+'i2',count=1)[0]
         WAVE_ARRAY_COUNT = np.fromfile(dataFile,dtype=co+'i4',count=1)[0]
@@ -204,8 +210,8 @@ def ReadBinaryTrace(filePath):
         HORIZ_INTERVAL = np.fromfile(dataFile,dtype=co+'f4',count=1)[0]
         HORIZ_OFFSET = np.fromfile(dataFile,dtype=co+'f8',count=1)[0]
         PIXEL_OFFSET = np.fromfile(dataFile,dtype=co+'f8',count=1)[0]
-        VERTUNIT = dataFile.read(48).rstrip(b'\0x00').decode('utf-8')
-        HORUNIT = dataFile.read(48).rstrip(b'\0x00').decode('utf-8')
+        VERTUNIT = dataFile.read(48).rstrip(b'\0x00').decode('latin_1')
+        HORUNIT = dataFile.read(48).rstrip(b'\0x00').decode('latin_1')
         HORIZ_UNCERTAINTY = np.fromfile(dataFile,dtype=co+'f4',count=1)[0]
         TRIGGER_TIME_SECONDS = np.fromfile(dataFile,dtype=co+'f8',count=1)[0]
         TRIGGER_TIME_MINUTES = np.fromfile(dataFile,dtype=np.int8,count=1)[0]
